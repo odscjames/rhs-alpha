@@ -10,17 +10,20 @@ Whatever tool is calling it - CLI or other code - should create one of these, se
 class Config:
 
     def __init__(self):
-        this_dir = os.path.dirname(os.path.realpath(__file__))
-        # This sets the default base dir in the code folder. There is an issue to change this later.
-        # https://github.com/open-contracting/kingfisher/issues/223
-        self.data_dir = os.path.join(this_dir, "..", "data")
+        self.web_api_keys = []
 
     def load_user_config(self):
+        # First, try and load any config in the ini files
+        self._load_user_config_ini()
+        # Second, try and load any config in the env (so env overwrites ini)
+        self._load_user_config_env()
 
-        if os.environ.get('KINGFISHER_DATA_DIR'):
-            self.data_dir = os.environ.get('KINGFISHER_DATA_DIR')
+    def _load_user_config_env(self):
+        if os.environ.get('WEB_API_KEYS'):
+            self.web_api_keys = [key.strip() for key in os.environ.get('WEB_API_KEYS').split(',')]
             return
 
+    def _load_user_config_ini(self):
         config = configparser.ConfigParser()
 
         if os.path.isfile(os.path.expanduser('~/.config/ocdskingfisher/config.ini')):
@@ -30,4 +33,4 @@ class Config:
         else:
             return
 
-        self.data_dir = config.get('DATA', 'DIR', fallback=self.data_dir)
+        self.web_api_keys = [key.strip() for key in config.get('WEB', 'API_KEYS', fallback='').split(',')]
