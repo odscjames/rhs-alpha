@@ -8,6 +8,9 @@ import ocdskingfisher.maindatabase.config
 from ocdskingfisher.models import Collection
 import alembic.config
 
+def get_hash_md5_for_data(data):
+    data_str = json.dumps(data, sort_keys=True)
+    return hashlib.md5(data_str.encode('utf-8')).hexdigest()
 
 class SetEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -124,7 +127,7 @@ class DataBase:
                                                                 name='ix_record_check_error_record_id_and_more')
                                             )
 
-    def _get_engine(self):
+    def get_engine(self):
         # We only create a connection if actually needed; sometimes people do operations that don't need a database
         # and in that case no need to connect.
         # But this side of kingfisher now always requires a DB, so there should not be a problem opening a connection!
@@ -133,7 +136,7 @@ class DataBase:
         return self._engine
 
     def delete_tables(self):
-        engine = self._get_engine()
+        engine = self.get_engine()
         engine.execute("drop table if exists record_check cascade")
         engine.execute("drop table if exists record_check_error cascade")
         engine.execute("drop table if exists release_check cascade")
@@ -158,7 +161,7 @@ class DataBase:
 
     def get_or_create_collection_id(self, source_id, data_version, sample):
 
-        with self._get_engine().begin() as connection:
+        with self.get_engine().begin() as connection:
             s = sa.sql.select([self.collection_table]) \
                 .where((self.collection_table.c.source_id == source_id) &
                        (self.collection_table.c.data_version == data_version) &
@@ -178,7 +181,7 @@ class DataBase:
 
     def get_all_collections(self):
         out = []
-        with self._get_engine().begin() as connection:
+        with self.get_engine().begin() as connection:
             s = ocdskingfisher.database.sa.sql.select([self.collection_table])
             for result in connection.execute(s):
                 out.append(Collection(
@@ -188,3 +191,104 @@ class DataBase:
                     sample=result['sample'],
                 ))
         return out
+
+
+class DatabaseStore:
+
+    def __init__(self, database, collection_id, file_name ):
+        self.database = database
+        self.collection_id = collection_id
+        self.file_name = file_name
+        self.connection = None
+        self.transaction = None
+        self.collection_file_status_id = None
+
+
+    def __enter__(self):
+        self.connection = self.database.get_engine().connect()
+        self.transaction = self.connection.begin()
+
+        value = self.connection.execute(self.database.collection_file_status_table.insert(), {
+            'collection_id': self.collection_id,
+            'filename': self.file_name,
+            'store_start_at': datetime.datetime.utcnow(),
+            # TODO store warning?
+        })
+
+        self.collection_file_status_id = value.inserted_primary_key[0]
+
+        return self
+
+    def __exit__(self, type, value, traceback):
+
+        if type:
+
+            self.transaction.rollback()
+
+            self.connection.close()
+
+        else:
+
+            self.connection.execute(
+                self.database.collection_file_status_table.update()
+                .where(self.database.collection_file_status_table.c.id == self.collection_file_status_id)
+                .values(store_end_at=datetime.datetime.utcnow())
+            )
+
+            self.transaction.commit()
+
+            self.connection.close()
+
+    def insert_record(self, row, package_data):
+        ocid = row.get('ocid')
+        package_data_id = self.get_id_for_package_data(package_data)
+        data_id = self.get_id_for_data(row)
+        self.connection.execute(self.database.record_table.insert(), {
+            'collection_file_status_id': self.collection_file_status_id,
+            'ocid': ocid,
+            'data_id': data_id,
+            'package_data_id': package_data_id,
+        })
+
+    def insert_release(self, row, package_data):
+        ocid = row.get('ocid')
+        release_id = row.get('id')
+        package_data_id = self.get_id_for_package_data(package_data)
+        data_id = self.get_id_for_data(row)
+        self.connection.execute(self.database.release_table.insert(), {
+            'collection_file_status_id': self.collection_file_status_id,
+            'release_id': release_id,
+            'ocid': ocid,
+            'data_id': data_id,
+            'package_data_id': package_data_id,
+        })
+
+    def get_id_for_package_data(self, package_data):
+
+        hash_md5 = get_hash_md5_for_data(package_data)
+
+        s = sa.sql.select([self.database.package_data_table]).where(self.database.package_data_table.c.hash_md5 == hash_md5)
+        result = self.connection.execute(s)
+        existing_table_row = result.fetchone()
+        if existing_table_row:
+            return existing_table_row.id
+        else:
+            return self.connection.execute(self.database.package_data_table.insert(), {
+                'hash_md5': hash_md5,
+                'data': package_data,
+            }).inserted_primary_key[0]
+
+    def get_id_for_data(self, data):
+
+        hash_md5 = get_hash_md5_for_data(data)
+
+        s = sa.sql.select([self.database.data_table]).where(self.database.data_table.c.hash_md5 == hash_md5)
+        result = self.connection.execute(s)
+        existing_table_row = result.fetchone()
+        if existing_table_row:
+            return existing_table_row.id
+        else:
+            return self.connection.execute(self.database.data_table.insert(), {
+                'hash_md5': hash_md5,
+                'data': data,
+            }).inserted_primary_key[0]

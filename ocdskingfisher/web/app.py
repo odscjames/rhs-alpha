@@ -2,6 +2,8 @@ from flask import Flask, request
 from ocdskingfisher.config import Config
 from ocdskingfisher.store import Store
 from ocdskingfisher.database import DataBase
+import tempfile
+import os
 
 config = Config()
 config.load_user_config()
@@ -23,12 +25,14 @@ def api_v1():
     return "OCDS Kingfisher APIs V1"
 
 
-@app.route("/api/v1/submit/", methods = ['GET', 'POST'])
+@app.route("/api/v1/submit/", methods = ['POST'])
 def api_v1_submit():
     # TODO this allows GET API_KEY values only, allow POST and header too!
     api_key = request.args.get('API_KEY')
     if not api_key or api_key not in config.web_api_keys:
         return "ACCESS DENIED" # TODO proper error
+
+    # TODO check all required fields are there!
 
     database = DataBase(config=config)
     store = Store(config=config, database=database)
@@ -39,7 +43,20 @@ def api_v1_submit():
         True if request.form.get('collection_sample', '0') in ['1'] else False,
     )
 
+    (tmp_file, tmp_filename) = tempfile.mkstemp(prefix="ocdskf-")
+    os.close(tmp_file)
 
+    request.files['file'].save(tmp_filename)
+
+    store.store_file(
+        request.form.get('file_name'),
+        request.form.get('file_url'),
+        request.form.get('file_data_type'),
+        request.form.get('file_encoding'),
+        tmp_filename
+    )
+
+    os.remove(tmp_filename)
 
     return "OCDS Kingfisher APIs V1 Submit"
 
