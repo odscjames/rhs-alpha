@@ -3,7 +3,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 import datetime
 import json
 import os
-import ocdskingfisher.maindatabase.config
 from ocdskingfisher.models import CollectionModel, FileModel
 import alembic.config
 from ocdskingfisher.util import get_hash_md5_for_data
@@ -132,7 +131,7 @@ class DataBase:
         # and in that case no need to connect.
         # But this side of kingfisher now always requires a DB, so there should not be a problem opening a connection!
         if not self._engine:
-            self._engine = sa.create_engine(ocdskingfisher.maindatabase.config.get_database_uri(), json_serializer=SetEncoder().encode)
+            self._engine = sa.create_engine(self.config.database_uri(), json_serializer=SetEncoder().encode)
         return self._engine
 
     def delete_tables(self):
@@ -152,6 +151,9 @@ class DataBase:
         engine.execute("drop table if exists alembic_version cascade")
 
     def create_tables(self):
+        # Note this DOES NOT work with self.config!
+        # It works with a brand new config instance that is created in ocdskingfisher/maindatabase/migrations/env.py
+        # Not sure how to solve that
         alembicargs = [
             '--config', os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'mainalembic.ini')),
             '--raiseerr',
@@ -182,7 +184,7 @@ class DataBase:
     def get_all_collections(self):
         out = []
         with self.get_engine().begin() as connection:
-            s = ocdskingfisher.database.sa.sql.select([self.collection_table])
+            s = sa.sql.select([self.collection_table])
             for result in connection.execute(s):
                 out.append(CollectionModel(
                     database_id=result['id'],
@@ -209,7 +211,7 @@ class DataBase:
     def get_all_files_in_collection(self, collection_id):
         out = []
         with self.get_engine().begin() as connection:
-            s = ocdskingfisher.database.sa.sql.select([self.collection_file_status_table]) \
+            s = sa.sql.select([self.collection_file_status_table]) \
                 .where(self.collection_file_status_table.c.collection_id == collection_id)
             for result in connection.execute(s):
                 out.append(FileModel(
