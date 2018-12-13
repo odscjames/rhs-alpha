@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import ocdskingfisher.maindatabase.config
+from ocdskingfisher.models import Collection
 import alembic.config
 
 
@@ -175,3 +176,15 @@ class DataBase:
             })
             return value.inserted_primary_key[0]
 
+    def get_all_collections(self):
+        out = []
+        with self._get_engine().begin() as connection:
+            s = ocdskingfisher.database.sa.sql.select([self.collection_table])
+            for result in connection.execute(s):
+                out.append(Collection(
+                    database_id=result['id'],
+                    source_id=result['source_id'],
+                    data_version=result['data_version'],
+                    sample=result['sample'],
+                ))
+        return out
