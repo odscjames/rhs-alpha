@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 import ocdskingfisher.maindatabase.config
-from ocdskingfisher.models import Collection
+from ocdskingfisher.models import CollectionModel, FileModel
 import alembic.config
 
 def get_hash_md5_for_data(data):
@@ -184,13 +184,75 @@ class DataBase:
         with self.get_engine().begin() as connection:
             s = ocdskingfisher.database.sa.sql.select([self.collection_table])
             for result in connection.execute(s):
-                out.append(Collection(
+                out.append(CollectionModel(
                     database_id=result['id'],
                     source_id=result['source_id'],
                     data_version=result['data_version'],
                     sample=result['sample'],
                 ))
         return out
+
+    def get_collection(self, collection_id):
+        with self.get_engine().begin() as connection:
+            s = sa.sql.select([self.collection_table]) \
+                .where(self.collection_table.c.id == collection_id)
+            result = connection.execute(s)
+            collection = result.fetchone()
+            if collection:
+                return CollectionModel(
+                    database_id=collection['id'],
+                    source_id=collection['source_id'],
+                    data_version=collection['data_version'],
+                    sample=collection['sample'],
+                )
+
+    def get_all_files_in_collection(self, collection_id):
+        out = []
+        with self.get_engine().begin() as connection:
+            s = ocdskingfisher.database.sa.sql.select([self.collection_file_status_table]) \
+                .where(self.collection_file_status_table.c.collection_id == collection_id)
+            for result in connection.execute(s):
+                out.append(FileModel(
+                    database_id=result['id'],
+                    filename=result['filename'],
+                ))
+        return out
+
+    def is_release_check_done(self, release_id, override_schema_version=None):
+        with self.get_engine().begin() as connection:
+            s = sa.sql.select([self.release_check_table]) \
+                .where((self.release_check_table.c.release_id == release_id) &
+                       (self.release_check_table.c.override_schema_version == override_schema_version))
+            result = connection.execute(s)
+            if result.fetchone():
+                return True
+
+            s = sa.sql.select([self.release_check_error_table]) \
+                .where((self.release_check_error_table.c.release_id == release_id) &
+                       (self.release_check_error_table.c.override_schema_version == override_schema_version))
+            result = connection.execute(s)
+            if result.fetchone():
+                return True
+
+        return False
+
+    def is_record_check_done(self, record_id, override_schema_version=None):
+        with self.get_engine().begin() as connection:
+            s = sa.sql.select([self.record_check_table]) \
+                .where((self.record_check_table.c.record_id == record_id) &
+                       (self.record_check_table.c.override_schema_version == override_schema_version))
+            result = connection.execute(s)
+            if result.fetchone():
+                return True
+
+            s = sa.sql.select([self.record_check_error_table]) \
+                .where((self.record_check_error_table.c.record_id == record_id) &
+                       (self.record_check_error_table.c.override_schema_version == override_schema_version))
+            result = connection.execute(s)
+            if result.fetchone():
+                return True
+
+        return False
 
 
 class DatabaseStore:
