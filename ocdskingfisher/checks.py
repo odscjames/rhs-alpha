@@ -37,7 +37,6 @@ class Checks:
             if not self.database.is_record_check_done(record_row['id'], override_schema_version=self.override_schema_version):
                 self.check_record_row(record_row, override_schema_version=self.override_schema_version)
 
-
     def handle_package(self, package):
         cove_temp_folder = tempfile.mkdtemp(prefix='ocdskingfisher-cove-', dir=tempfile.gettempdir())
         try:

@@ -1,5 +1,6 @@
 from ocdskingfisher.database import DataBase
 
+
 class CLICommand:
     command = ''
 

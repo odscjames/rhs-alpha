@@ -1,6 +1,7 @@
 import json
 from ocdskingfisher.database import DatabaseStore
 
+
 class Store:
 
     def __init__(self, config, database):

@@ -8,9 +8,11 @@ import ocdskingfisher.maindatabase.config
 from ocdskingfisher.models import CollectionModel, FileModel
 import alembic.config
 
+
 def get_hash_md5_for_data(data):
     data_str = json.dumps(data, sort_keys=True)
     return hashlib.md5(data_str.encode('utf-8')).hexdigest()
+
 
 class SetEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -28,104 +30,107 @@ class DataBase:
         self.metadata = sa.MetaData()
 
         self.collection_table = sa.Table('collection', self.metadata,
-                                    sa.Column('id', sa.Integer, primary_key=True),
-                                    sa.Column('source_id', sa.Text, nullable=False),
-                                    sa.Column('data_version', sa.Text, nullable=False),
-                                    sa.Column('gather_start_at', sa.DateTime(timezone=False), nullable=True),
-                                    sa.Column('gather_end_at', sa.DateTime(timezone=False), nullable=True),
-                                    sa.Column('fetch_start_at', sa.DateTime(timezone=False), nullable=True),
-                                    sa.Column('fetch_end_at', sa.DateTime(timezone=False), nullable=True),
-                                    sa.Column('store_start_at', sa.DateTime(timezone=False), nullable=False),
-                                    sa.Column('store_end_at', sa.DateTime(timezone=False), nullable=True),
-                                    sa.Column('sample', sa.Boolean, nullable=False, default=False),
-                                    sa.UniqueConstraint('source_id', 'data_version', 'sample'),
-                                    )
+                                         sa.Column('id', sa.Integer, primary_key=True),
+                                         sa.Column('source_id', sa.Text, nullable=False),
+                                         sa.Column('data_version', sa.Text, nullable=False),
+                                         sa.Column('gather_start_at', sa.DateTime(timezone=False), nullable=True),
+                                         sa.Column('gather_end_at', sa.DateTime(timezone=False), nullable=True),
+                                         sa.Column('fetch_start_at', sa.DateTime(timezone=False), nullable=True),
+                                         sa.Column('fetch_end_at', sa.DateTime(timezone=False), nullable=True),
+                                         sa.Column('store_start_at', sa.DateTime(timezone=False), nullable=False),
+                                         sa.Column('store_end_at', sa.DateTime(timezone=False), nullable=True),
+                                         sa.Column('sample', sa.Boolean, nullable=False, default=False),
+                                         sa.UniqueConstraint('source_id', 'data_version', 'sample'),
+                                         )
 
         self.collection_file_status_table = sa.Table('collection_file_status', self.metadata,
-                                                sa.Column('id', sa.Integer, primary_key=True),
-                                                sa.Column('collection_id', sa.Integer,
-                                                          sa.ForeignKey("collection.id"), nullable=False),
-                                                sa.Column('filename', sa.Text, nullable=True),
-                                                sa.Column('store_start_at', sa.DateTime(timezone=False), nullable=True),
-                                                sa.Column('store_end_at', sa.DateTime(timezone=False), nullable=True),
-                                                sa.Column('warnings', JSONB, nullable=True),
-                                                sa.UniqueConstraint('collection_id', 'filename'),
-                                                )
+                                                     sa.Column('id', sa.Integer, primary_key=True),
+                                                     sa.Column('collection_id', sa.Integer,
+                                                               sa.ForeignKey("collection.id"), nullable=False),
+                                                     sa.Column('filename', sa.Text, nullable=True),
+                                                     sa.Column('store_start_at', sa.DateTime(timezone=False),
+                                                               nullable=True),
+                                                     sa.Column('store_end_at', sa.DateTime(timezone=False),
+                                                               nullable=True),
+                                                     sa.Column('warnings', JSONB, nullable=True),
+                                                     sa.UniqueConstraint('collection_id', 'filename'),
+                                                     )
 
         self.data_table = sa.Table('data', self.metadata,
-                              sa.Column('id', sa.Integer, primary_key=True),
-                              sa.Column('hash_md5', sa.Text, nullable=False, unique=True),
-                              sa.Column('data', JSONB, nullable=False),
-                              )
+                                   sa.Column('id', sa.Integer, primary_key=True),
+                                   sa.Column('hash_md5', sa.Text, nullable=False, unique=True),
+                                   sa.Column('data', JSONB, nullable=False),
+                                   )
 
         self.package_data_table = sa.Table('package_data', self.metadata,
-                                      sa.Column('id', sa.Integer, primary_key=True),
-                                      sa.Column('hash_md5', sa.Text, nullable=False, unique=True),
-                                      sa.Column('data', JSONB, nullable=False),
-                                      )
+                                           sa.Column('id', sa.Integer, primary_key=True),
+                                           sa.Column('hash_md5', sa.Text, nullable=False, unique=True),
+                                           sa.Column('data', JSONB, nullable=False),
+                                           )
 
         self.release_table = sa.Table('release', self.metadata,
-                                 sa.Column('id', sa.Integer, primary_key=True),
-                                 sa.Column('collection_file_status_id', sa.Integer,
-                                           sa.ForeignKey("collection_file_status.id"), nullable=False),
-                                 sa.Column('release_id', sa.Text, nullable=True),
-                                 sa.Column('ocid', sa.Text, nullable=True),
-                                 sa.Column('data_id', sa.Integer, sa.ForeignKey("data.id"), nullable=False),
-                                 sa.Column('package_data_id', sa.Integer, sa.ForeignKey("package_data.id"),
-                                           nullable=False),
-                                 )
-
-        self.record_table = sa.Table('record', self.metadata,
-                                sa.Column('id', sa.Integer, primary_key=True),
-                                sa.Column('collection_file_status_id', sa.Integer,
-                                          sa.ForeignKey("collection_file_status.id"), nullable=False),
-                                sa.Column('ocid', sa.Text, nullable=True),
-                                sa.Column('data_id', sa.Integer, sa.ForeignKey("data.id"), nullable=False),
-                                sa.Column('package_data_id', sa.Integer, sa.ForeignKey("package_data.id"),
-                                          nullable=False),
-                                )
-
-        self.release_check_table = sa.Table('release_check', self.metadata,
-                                       sa.Column('id', sa.Integer, primary_key=True),
-                                       sa.Column('release_id', sa.Integer, sa.ForeignKey("release.id"), index=True,
-                                                 unique=False, nullable=False),
-                                       sa.Column('override_schema_version', sa.Text, nullable=True),
-                                       sa.Column('cove_output', JSONB, nullable=False),
-                                       sa.UniqueConstraint('release_id', 'override_schema_version',
-                                                           name='ix_release_check_release_id_and_more')
-                                       )
-
-        self.record_check_table = sa.Table('record_check', self.metadata,
                                       sa.Column('id', sa.Integer, primary_key=True),
-                                      sa.Column('record_id', sa.Integer, sa.ForeignKey("record.id"), index=True,
-                                                unique=False,
+                                      sa.Column('collection_file_status_id', sa.Integer,
+                                                sa.ForeignKey("collection_file_status.id"), nullable=False),
+                                      sa.Column('release_id', sa.Text, nullable=True),
+                                      sa.Column('ocid', sa.Text, nullable=True),
+                                      sa.Column('data_id', sa.Integer, sa.ForeignKey("data.id"), nullable=False),
+                                      sa.Column('package_data_id', sa.Integer, sa.ForeignKey("package_data.id"),
                                                 nullable=False),
-                                      sa.Column('override_schema_version', sa.Text, nullable=True),
-                                      sa.Column('cove_output', JSONB, nullable=False),
-                                      sa.UniqueConstraint('record_id', 'override_schema_version',
-                                                          name='ix_record_check_record_id_and_more')
                                       )
 
-        self.release_check_error_table = sa.Table('release_check_error', self.metadata,
-                                             sa.Column('id', sa.Integer, primary_key=True),
-                                             sa.Column('release_id', sa.Integer, sa.ForeignKey("release.id"),
-                                                       index=True,
-                                                       unique=False, nullable=False),
-                                             sa.Column('override_schema_version', sa.Text, nullable=True),
-                                             sa.Column('error', sa.Text, nullable=False),
-                                             sa.UniqueConstraint('release_id', 'override_schema_version',
-                                                                 name='ix_release_check_error_release_id_and_more')
-                                             )
+        self.record_table = sa.Table('record', self.metadata,
+                                     sa.Column('id', sa.Integer, primary_key=True),
+                                     sa.Column('collection_file_status_id', sa.Integer,
+                                               sa.ForeignKey("collection_file_status.id"), nullable=False),
+                                     sa.Column('ocid', sa.Text, nullable=True),
+                                     sa.Column('data_id', sa.Integer, sa.ForeignKey("data.id"), nullable=False),
+                                     sa.Column('package_data_id', sa.Integer, sa.ForeignKey("package_data.id"),
+                                               nullable=False),
+                                     )
 
-        self.record_check_error_table = sa.Table('record_check_error', self.metadata,
+        self.release_check_table = sa.Table('release_check', self.metadata,
                                             sa.Column('id', sa.Integer, primary_key=True),
-                                            sa.Column('record_id', sa.Integer, sa.ForeignKey("record.id"), index=True,
+                                            sa.Column('release_id', sa.Integer, sa.ForeignKey("release.id"), index=True,
                                                       unique=False, nullable=False),
                                             sa.Column('override_schema_version', sa.Text, nullable=True),
-                                            sa.Column('error', sa.Text, nullable=False),
-                                            sa.UniqueConstraint('record_id', 'override_schema_version',
-                                                                name='ix_record_check_error_record_id_and_more')
+                                            sa.Column('cove_output', JSONB, nullable=False),
+                                            sa.UniqueConstraint('release_id', 'override_schema_version',
+                                                                name='ix_release_check_release_id_and_more')
                                             )
+
+        self.record_check_table = sa.Table('record_check', self.metadata,
+                                           sa.Column('id', sa.Integer, primary_key=True),
+                                           sa.Column('record_id', sa.Integer, sa.ForeignKey("record.id"), index=True,
+                                                     unique=False,
+                                                     nullable=False),
+                                           sa.Column('override_schema_version', sa.Text, nullable=True),
+                                           sa.Column('cove_output', JSONB, nullable=False),
+                                           sa.UniqueConstraint('record_id', 'override_schema_version',
+                                                               name='ix_record_check_record_id_and_more')
+                                           )
+
+        self.release_check_error_table = sa.Table('release_check_error', self.metadata,
+                                                  sa.Column('id', sa.Integer, primary_key=True),
+                                                  sa.Column('release_id', sa.Integer, sa.ForeignKey("release.id"),
+                                                            index=True,
+                                                            unique=False, nullable=False),
+                                                  sa.Column('override_schema_version', sa.Text, nullable=True),
+                                                  sa.Column('error', sa.Text, nullable=False),
+                                                  sa.UniqueConstraint('release_id', 'override_schema_version',
+                                                                      name='ix_release_check_error_release_id_and_more')
+                                                  )
+
+        self.record_check_error_table = sa.Table('record_check_error', self.metadata,
+                                                 sa.Column('id', sa.Integer, primary_key=True),
+                                                 sa.Column('record_id', sa.Integer, sa.ForeignKey("record.id"),
+                                                           index=True,
+                                                           unique=False, nullable=False),
+                                                 sa.Column('override_schema_version', sa.Text, nullable=True),
+                                                 sa.Column('error', sa.Text, nullable=False),
+                                                 sa.UniqueConstraint('record_id', 'override_schema_version',
+                                                                     name='ix_record_check_error_record_id_and_more')
+                                                 )
 
     def get_engine(self):
         # We only create a connection if actually needed; sometimes people do operations that don't need a database
@@ -257,14 +262,13 @@ class DataBase:
 
 class DatabaseStore:
 
-    def __init__(self, database, collection_id, file_name ):
+    def __init__(self, database, collection_id, file_name):
         self.database = database
         self.collection_id = collection_id
         self.file_name = file_name
         self.connection = None
         self.transaction = None
         self.collection_file_status_id = None
-
 
     def __enter__(self):
         self.connection = self.database.get_engine().connect()
