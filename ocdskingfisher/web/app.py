@@ -1,6 +1,7 @@
 from flask import Flask, request
 from ocdskingfisher.config import Config
 from ocdskingfisher.store import Store
+from ocdskingfisher.database import DataBase
 
 config = Config()
 config.load_user_config()
@@ -29,7 +30,8 @@ def api_v1_submit():
     if not api_key or api_key not in config.web_api_keys:
         return "ACCESS DENIED" # TODO proper error
 
-    store = Store(config)
+    database = DataBase(config=config)
+    store = Store(config=config, database=database)
 
     store.load_collection(
         request.form.get('collection_source'),

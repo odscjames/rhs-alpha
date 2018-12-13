@@ -1,5 +1,6 @@
 import ocdskingfisher.database
 import ocdskingfisher.cli.commands.base
+from ocdskingfisher.database import DataBase
 
 
 class UpgradeDataBaseCLICommand(ocdskingfisher.cli.commands.base.CLICommand):
@@ -10,11 +11,13 @@ class UpgradeDataBaseCLICommand(ocdskingfisher.cli.commands.base.CLICommand):
 
     def run_command(self, args):
 
+        database = DataBase(config=self.config)
+
         if args.deletefirst:
             if args.verbose:
                 print("Dropping Database")
-            ocdskingfisher.database.delete_tables()
+            database.delete_tables()
 
         if args.verbose:
             print("Upgrading/Creating Database")
-        ocdskingfisher.database.create_tables()
+        database.create_tables()
