@@ -131,7 +131,7 @@ class DataBase:
         # and in that case no need to connect.
         # But this side of kingfisher now always requires a DB, so there should not be a problem opening a connection!
         if not self._engine:
-            self._engine = sa.create_engine(self.config.database_uri(), json_serializer=SetEncoder().encode)
+            self._engine = sa.create_engine(self.config.database_uri, json_serializer=SetEncoder().encode)
         return self._engine
 
     def delete_tables(self):

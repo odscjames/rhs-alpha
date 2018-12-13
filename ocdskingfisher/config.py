@@ -13,11 +13,12 @@ class Config:
 
     def __init__(self):
         self.web_api_keys = []
-        self.database_host = None
-        self.database_port = None
-        self.database_user = None
-        self.database_name = None
-        self.database_password = None
+        self.database_uri = ''
+        self._database_host = ''
+        self._database_port = 5432
+        self._database_user = ''
+        self._database_name = ''
+        self._database_password = ''
 
     def load_user_config(self):
         # First, try and load any config in the ini files
@@ -28,16 +29,26 @@ class Config:
         self._load_user_config_env()
 
     def _load_user_config_pgpass(self):
-        if not self.database_host or not self.database_name or not self.database_user or not self.database_port:
+        if not self._database_name or not self._database_user:
             return
 
         try:
-            self.database_password = pgpasslib.getpass(
-                self.database_host,
-                self.database_port,
-                self.database_user,
-                self.database_name
+            password = pgpasslib.getpass(
+                self._database_host,
+                self._database_port,
+                self._database_user,
+                self._database_name
             )
+            if password:
+                self._database_password = password
+                self.database_uri = 'postgresql://{}:{}@{}:{}/{}'.format(
+                    self._database_user,
+                    self._database_password,
+                    self._database_host,
+                    self._database_port,
+                    self._database_name
+                )
+
         except pgpasslib.FileNotFound:
             # Fail silently when no files found.
             return
@@ -53,18 +64,8 @@ class Config:
         if os.environ.get('KINGFISHER_WEB_API_KEYS'):
             self.web_api_keys = [key.strip() for key in os.environ.get('KINGFISHER_WEB_API_KEYS').split(',')]
 
-        # TODO For backwards compat, should also support DB_URI
-
-        if os.environ.get('KINGFISHER_DATABASE_HOST'):
-            self.database_host = os.environ.get('KINGFISHER_DATABASE_HOST')
-        if os.environ.get('KINGFISHER_DATABASE_PORT'):
-            self.database_port = os.environ.get('KINGFISHER_DATABASE_PORT')
-        if os.environ.get('KINGFISHER_DATABASE_USER'):
-            self.database_user = os.environ.get('KINGFISHER_DATABASE_USER')
-        if os.environ.get('KINGFISHER_DATABASE_NAME'):
-            self.database_name = os.environ.get('KINGFISHER_DATABASE_NAME')
-        if os.environ.get('KINGFISHER_DATABASE_PASSWORD'):
-            self.database_password = os.environ.get('KINGFISHER_DATABASE_PASSWORD')
+        if os.environ.get('DB_URI'):
+            self.database_uri = os.environ.get('DB_URI')
 
     def _load_user_config_ini(self):
         config = configparser.ConfigParser()
@@ -77,17 +78,17 @@ class Config:
             return
 
         self.web_api_keys = [key.strip() for key in config.get('WEB', 'API_KEYS', fallback='').split(',')]
-        self.database_host = config.get('DBHOST', 'HOSTNAME')
-        self.database_port = config.get('DBHOST', 'PORT')
-        self.database_user = config.get('DBHOST', 'USERNAME')
-        self.database_name = config.get('DBHOST', 'DBNAME')
-        self.database_password = config.get('DBHOST', 'PASSWORD', fallback='')
 
-    def database_uri(self):
-        return 'postgresql://{}:{}@{}:{}/{}'.format(
-            self.database_user,
-            self.database_password,
-            self.database_host,
-            self.database_port,
-            self.database_name
+        self._database_host = config.get('DBHOST', 'HOSTNAME')
+        self._database_port = config.get('DBHOST', 'PORT')
+        self._database_user = config.get('DBHOST', 'USERNAME')
+        self._database_name = config.get('DBHOST', 'DBNAME')
+        self._database_password = config.get('DBHOST', 'PASSWORD', fallback='')
+
+        self.database_uri = 'postgresql://{}:{}@{}:{}/{}'.format(
+            self._database_user,
+            self._database_password,
+            self._database_host,
+            self._database_port,
+            self._database_name
         )
