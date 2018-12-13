@@ -1,7 +1,14 @@
 import time
 import requests
+import json
+import hashlib
 
 RETRY_TIME = 10
+
+
+def get_hash_md5_for_data(data):
+    data_str = json.dumps(data, sort_keys=True)
+    return hashlib.md5(data_str.encode('utf-8')).hexdigest()
 
 
 def get_url_request(url, headers=None, stream=False, tries=1, errors=None, verify_ssl=True):

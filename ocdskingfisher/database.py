@@ -1,17 +1,12 @@
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 import datetime
-import hashlib
 import json
 import os
 import ocdskingfisher.maindatabase.config
 from ocdskingfisher.models import CollectionModel, FileModel
 import alembic.config
-
-
-def get_hash_md5_for_data(data):
-    data_str = json.dumps(data, sort_keys=True)
-    return hashlib.md5(data_str.encode('utf-8')).hexdigest()
+from ocdskingfisher.util import get_hash_md5_for_data
 
 
 class SetEncoder(json.JSONEncoder):
