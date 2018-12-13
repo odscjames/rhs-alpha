@@ -18,19 +18,14 @@ class SetEncoder(json.JSONEncoder):
 _engine = None
 
 
-# We must only create a connection if actually needed; sometimes people do operations that don't need a database
-#   and in that case it shouldn't error that it can't connect to one!
+# We only create a connection if actually needed; sometimes people do operations that don't need a database
+#   and in that case no need to connect.
+# But this side of kingfisher now always requires a DB, so there should not be a problem opening a connection!
 def get_engine():
     global _engine
     if not _engine:
         _engine = sa.create_engine(ocdskingfisher.maindatabase.config.get_database_uri(), json_serializer=SetEncoder().encode)
     return _engine
-
-
-# This can be called by scripts that know they are going to use the database later.
-# It should setup any thing needed and raise any errors now.
-def init():
-    get_engine()
 
 
 metadata = sa.MetaData()
@@ -449,3 +444,24 @@ def get_all_collections():
                     "sample": result['sample'],
                 })
     return out
+
+def get_or_create_collection_id(source_id, data_version, sample):
+
+    with get_engine().begin() as connection:
+        s = sa.sql.select([collection_table]) \
+            .where((collection_table.c.source_id == source_id) &
+                   (collection_table.c.data_version == data_version) &
+                   (collection_table.c.sample == sample))
+        result = connection.execute(s)
+        collection = result.fetchone()
+        if collection:
+            return collection['id']
+
+        value = connection.execute(collection_table.insert(), {
+            'source_id': source_id,
+            'data_version': data_version,
+            'sample': sample,
+            'store_start_at': datetime.datetime.utcnow(),
+        })
+        return value.inserted_primary_key[0]
+
