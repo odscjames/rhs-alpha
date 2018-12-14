@@ -13,34 +13,49 @@ class Store:
         self.collection_id = self.database.get_or_create_collection_id(collection_source, collection_data_version, collection_sample)
 
     def store_file(self, filename, url, data_type, encoding, local_filename):
-        try:
-            with open(local_filename, encoding=encoding) as f:
-                data = json.load(f)
 
-        except Exception as e:
-            raise e
-            # TODO Store error in database and make nice HTTP response!
-
-        objects_list = []
-        if data_type == 'record_package_list_in_results':
-            objects_list.extend(data['results'])
-        elif data_type == 'release_package_list_in_results':
-            objects_list.extend(data['results'])
-        elif data_type == 'record_package_list' or data_type == 'release_package_list':
-            objects_list.extend(data)
-        else:
-            objects_list.append(data)
-
-        number = 0
-        for item_data in objects_list:
-
+        if data_type == 'release_package_json_lines' or data_type == 'record_package_json_lines':
             try:
-                self.store_file_item(filename, url, data_type, item_data, number)
-                number += 1
+                with open(local_filename, encoding=encoding) as f:
+                    number = 0
+                    raw_data = f.readline()
+                    while raw_data:
+                        self.store_file_item(filename, url, data_type, json.loads(raw_data), number)
+                        raw_data = f.readline()
+                        number += 1
+            except Exception as e:
+                raise e
+                # TODO Store error in database and make nice HTTP response!
+
+        else:
+            try:
+                with open(local_filename, encoding=encoding) as f:
+                    data = json.load(f)
 
             except Exception as e:
                 raise e
                 # TODO Store error in database and make nice HTTP response!
+
+            objects_list = []
+            if data_type == 'record_package_list_in_results':
+                objects_list.extend(data['results'])
+            elif data_type == 'release_package_list_in_results':
+                objects_list.extend(data['results'])
+            elif data_type == 'record_package_list' or data_type == 'release_package_list':
+                objects_list.extend(data)
+            else:
+                objects_list.append(data)
+
+            number = 0
+            for item_data in objects_list:
+
+                try:
+                    self.store_file_item(filename, url, data_type, item_data, number)
+                    number += 1
+
+                except Exception as e:
+                    raise e
+                    # TODO Store error in database and make nice HTTP response!
 
         self.database.mark_collection_file_store_done(self.collection_id, filename)
 
