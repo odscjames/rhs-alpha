@@ -16,6 +16,11 @@ def hello():
     return "OCDS Kingfisher"
 
 
+@app.route("/robots.txt")
+def robots_txt():
+    return "User-agent: *\nDisallow: /"
+
+
 @app.route("/api/")
 def api():
     return "OCDS Kingfisher APIs"
