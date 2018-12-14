@@ -52,6 +52,10 @@ class DataBase:
                                                    sa.Column('collection_file_id', sa.Integer,
                                                              sa.ForeignKey("collection_file.id"),
                                                              nullable=False),
+                                                   sa.Column('store_start_at', sa.DateTime(timezone=False),
+                                                             nullable=True),
+                                                   sa.Column('store_end_at', sa.DateTime(timezone=False),
+                                                             nullable=True),
                                                    sa.Column('number', sa.Integer),
                                                    sa.UniqueConstraint('collection_file_id', 'number'),
                                                    )
@@ -264,6 +268,15 @@ class DataBase:
 
         return False
 
+    def mark_collection_file_store_done(self, collection_id, filename):
+        with self.get_engine().begin() as connection:
+            connection.execute(
+                self.collection_file_table.update()
+                    .where((self.collection_file_table.c.collection_id == collection_id) &
+                           (self.collection_file_table.c.filename == filename))
+                    .values(store_end_at=datetime.datetime.utcnow())
+            )
+
 
 class DatabaseStore:
 
@@ -306,6 +319,7 @@ class DatabaseStore:
         value = self.connection.execute(self.database.collection_file_item_table.insert(), {
             'collection_file_id': self.collection_file_id,
             'number': self.number,
+            'store_start_at': datetime.datetime.utcnow(),
         })
         # TODO look for unique key clashes, error appropriately!
         self.collection_file_item_id = value.inserted_primary_key[0]
@@ -323,8 +337,8 @@ class DatabaseStore:
         else:
 
             self.connection.execute(
-                self.database.collection_file_table.update()
-                .where(self.database.collection_file_table.c.id == self.collection_file_id)
+                self.database.collection_file_item_table.update()
+                .where(self.database.collection_file_item_table.c.id == self.collection_file_item_id)
                 .values(store_end_at=datetime.datetime.utcnow())
             )
 

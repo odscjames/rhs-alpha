@@ -42,11 +42,14 @@ def upgrade():
                     )
 
     op.create_table('collection_file_item',
-
                     sa.Column('id', sa.Integer, primary_key=True),
                     sa.Column('collection_file_id', sa.Integer,
                               sa.ForeignKey("collection_file.id"),
                               nullable=False),
+                    sa.Column('store_start_at', sa.DateTime(timezone=False),
+                              nullable=True),
+                    sa.Column('store_end_at', sa.DateTime(timezone=False),
+                              nullable=True),
                     sa.Column('number', sa.Integer),
                     sa.UniqueConstraint('collection_file_id', 'number'),
                     )

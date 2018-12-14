@@ -42,6 +42,8 @@ class Store:
                 raise e
                 # TODO Store error in database and make nice HTTP response!
 
+        self.database.mark_collection_file_store_done(self.collection_id, filename)
+
     def store_file_item(self, filename, url, data_type, json_data, number):
 
         if not isinstance(json_data, dict):
