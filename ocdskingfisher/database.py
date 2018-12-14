@@ -27,28 +27,34 @@ class DataBase:
                                          sa.Column('id', sa.Integer, primary_key=True),
                                          sa.Column('source_id', sa.Text, nullable=False),
                                          sa.Column('data_version', sa.Text, nullable=False),
-                                         sa.Column('gather_start_at', sa.DateTime(timezone=False), nullable=True),
-                                         sa.Column('gather_end_at', sa.DateTime(timezone=False), nullable=True),
-                                         sa.Column('fetch_start_at', sa.DateTime(timezone=False), nullable=True),
-                                         sa.Column('fetch_end_at', sa.DateTime(timezone=False), nullable=True),
                                          sa.Column('store_start_at', sa.DateTime(timezone=False), nullable=False),
                                          sa.Column('store_end_at', sa.DateTime(timezone=False), nullable=True),
                                          sa.Column('sample', sa.Boolean, nullable=False, default=False),
                                          sa.UniqueConstraint('source_id', 'data_version', 'sample'),
                                          )
 
-        self.collection_file_status_table = sa.Table('collection_file_status', self.metadata,
-                                                     sa.Column('id', sa.Integer, primary_key=True),
-                                                     sa.Column('collection_id', sa.Integer,
-                                                               sa.ForeignKey("collection.id"), nullable=False),
-                                                     sa.Column('filename', sa.Text, nullable=True),
-                                                     sa.Column('store_start_at', sa.DateTime(timezone=False),
-                                                               nullable=True),
-                                                     sa.Column('store_end_at', sa.DateTime(timezone=False),
-                                                               nullable=True),
-                                                     sa.Column('warnings', JSONB, nullable=True),
-                                                     sa.UniqueConstraint('collection_id', 'filename'),
-                                                     )
+        # Should be named collection_file but left for backwards compatibility!
+        self.collection_file_table = sa.Table('collection_file', self.metadata,
+                                              sa.Column('id', sa.Integer, primary_key=True),
+                                              sa.Column('collection_id', sa.Integer,
+                                                        sa.ForeignKey("collection.id"), nullable=False),
+                                              sa.Column('filename', sa.Text, nullable=True),
+                                              sa.Column('store_start_at', sa.DateTime(timezone=False),
+                                                        nullable=True),
+                                              sa.Column('store_end_at', sa.DateTime(timezone=False),
+                                                        nullable=True),
+                                              sa.Column('warnings', JSONB, nullable=True),
+                                              sa.UniqueConstraint('collection_id', 'filename'),
+                                              )
+
+        self.collection_file_item_table = sa.Table('collection_file_item', self.metadata,
+                                                   sa.Column('id', sa.Integer, primary_key=True),
+                                                   sa.Column('collection_file_id', sa.Integer,
+                                                             sa.ForeignKey("collection_file.id"),
+                                                             nullable=False),
+                                                   sa.Column('number', sa.Integer),
+                                                   sa.UniqueConstraint('collection_file_id', 'number'),
+                                                   )
 
         self.data_table = sa.Table('data', self.metadata,
                                    sa.Column('id', sa.Integer, primary_key=True),
@@ -64,8 +70,8 @@ class DataBase:
 
         self.release_table = sa.Table('release', self.metadata,
                                       sa.Column('id', sa.Integer, primary_key=True),
-                                      sa.Column('collection_file_status_id', sa.Integer,
-                                                sa.ForeignKey("collection_file_status.id"), nullable=False),
+                                      sa.Column('collection_file_item_id', sa.Integer,
+                                                sa.ForeignKey("collection_file_item.id"), nullable=False),
                                       sa.Column('release_id', sa.Text, nullable=True),
                                       sa.Column('ocid', sa.Text, nullable=True),
                                       sa.Column('data_id', sa.Integer, sa.ForeignKey("data.id"), nullable=False),
@@ -75,8 +81,8 @@ class DataBase:
 
         self.record_table = sa.Table('record', self.metadata,
                                      sa.Column('id', sa.Integer, primary_key=True),
-                                     sa.Column('collection_file_status_id', sa.Integer,
-                                               sa.ForeignKey("collection_file_status.id"), nullable=False),
+                                     sa.Column('collection_file_item_id', sa.Integer,
+                                               sa.ForeignKey("collection_file_item.id"), nullable=False),
                                      sa.Column('ocid', sa.Text, nullable=True),
                                      sa.Column('data_id', sa.Integer, sa.ForeignKey("data.id"), nullable=False),
                                      sa.Column('package_data_id', sa.Integer, sa.ForeignKey("package_data.id"),
@@ -144,7 +150,9 @@ class DataBase:
         engine.execute("drop table if exists release cascade")
         engine.execute("drop table if exists package_data cascade")
         engine.execute("drop table if exists data cascade")
-        engine.execute("drop table if exists collection_file_status cascade")
+        engine.execute("drop table if exists collection_file_item")
+        engine.execute("drop table if exists collection_file_status cascade")  # This is the old table name
+        engine.execute("drop table if exists collection_file cascade")
         engine.execute("drop table if exists source_session_file_status cascade")  # This is the old table name
         engine.execute("drop table if exists collection cascade")
         engine.execute("drop table if exists source_session cascade")  # This is the old table name
@@ -211,8 +219,8 @@ class DataBase:
     def get_all_files_in_collection(self, collection_id):
         out = []
         with self.get_engine().begin() as connection:
-            s = sa.sql.select([self.collection_file_status_table]) \
-                .where(self.collection_file_status_table.c.collection_id == collection_id)
+            s = sa.sql.select([self.collection_file_table]) \
+                .where(self.collection_file_table.c.collection_id == collection_id)
             for result in connection.execute(s):
                 out.append(FileModel(
                     database_id=result['id'],
@@ -259,26 +267,48 @@ class DataBase:
 
 class DatabaseStore:
 
-    def __init__(self, database, collection_id, file_name):
+    def __init__(self, database, collection_id, file_name, number):
         self.database = database
         self.collection_id = collection_id
         self.file_name = file_name
+        self.number = number
         self.connection = None
         self.transaction = None
-        self.collection_file_status_id = None
+        self.collection_file_id = None
+        self.collection_file_item_id = None
 
     def __enter__(self):
         self.connection = self.database.get_engine().connect()
         self.transaction = self.connection.begin()
 
-        value = self.connection.execute(self.database.collection_file_status_table.insert(), {
-            'collection_id': self.collection_id,
-            'filename': self.file_name,
-            'store_start_at': datetime.datetime.utcnow(),
-            # TODO store warning?
-        })
+        # Collection File!
+        s = sa.sql.select([self.database.collection_file_table]) \
+            .where((self.database.collection_file_table.c.collection_id == self.collection_id) &
+                   (self.database.collection_file_table.c.filename == self.file_name))
+        result = self.connection.execute(s)
 
-        self.collection_file_status_id = value.inserted_primary_key[0]
+        collection_file_table_row = result.fetchone()
+
+        if collection_file_table_row:
+            self.collection_file_id = collection_file_table_row['id']
+        else:
+            value = self.connection.execute(self.database.collection_file_table.insert(), {
+                'collection_id': self.collection_id,
+                'filename': self.file_name,
+                'store_start_at': datetime.datetime.utcnow(),
+                # TODO store warning?
+            })
+            # TODO look for unique key clashes, error appropriately!
+            self.collection_file_id = value.inserted_primary_key[0]
+
+        # Collection File Item!
+
+        value = self.connection.execute(self.database.collection_file_item_table.insert(), {
+            'collection_file_id': self.collection_file_id,
+            'number': self.number,
+        })
+        # TODO look for unique key clashes, error appropriately!
+        self.collection_file_item_id = value.inserted_primary_key[0]
 
         return self
 
@@ -293,8 +323,8 @@ class DatabaseStore:
         else:
 
             self.connection.execute(
-                self.database.collection_file_status_table.update()
-                .where(self.database.collection_file_status_table.c.id == self.collection_file_status_id)
+                self.database.collection_file_table.update()
+                .where(self.database.collection_file_table.c.id == self.collection_file_id)
                 .values(store_end_at=datetime.datetime.utcnow())
             )
 
@@ -307,7 +337,7 @@ class DatabaseStore:
         package_data_id = self.get_id_for_package_data(package_data)
         data_id = self.get_id_for_data(row)
         self.connection.execute(self.database.record_table.insert(), {
-            'collection_file_status_id': self.collection_file_status_id,
+            'collection_file_item_id': self.collection_file_item_id,
             'ocid': ocid,
             'data_id': data_id,
             'package_data_id': package_data_id,
@@ -319,7 +349,7 @@ class DatabaseStore:
         package_data_id = self.get_id_for_package_data(package_data)
         data_id = self.get_id_for_data(row)
         self.connection.execute(self.database.release_table.insert(), {
-            'collection_file_status_id': self.collection_file_status_id,
+            'collection_file_item_id': self.collection_file_item_id,
             'release_id': release_id,
             'ocid': ocid,
             'data_id': data_id,
