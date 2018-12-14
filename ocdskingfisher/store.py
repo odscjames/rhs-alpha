@@ -12,7 +12,7 @@ class Store:
     def load_collection(self, collection_source, collection_data_version, collection_sample):
         self.collection_id = self.database.get_or_create_collection_id(collection_source, collection_data_version, collection_sample)
 
-    def store_file(self, filename, url, data_type, encoding, local_filename):
+    def store_file_from_local(self, filename, url, data_type, encoding, local_filename):
 
         if data_type == 'release_package_json_lines' or data_type == 'record_package_json_lines':
             try:
@@ -58,6 +58,23 @@ class Store:
                     # TODO Store error in database and make nice HTTP response!
 
         self.database.mark_collection_file_store_done(self.collection_id, filename)
+
+    def store_file_item_from_local(self, filename, url, data_type, encoding, number, local_filename):
+
+        try:
+            with open(local_filename, encoding=encoding) as f:
+                data = json.load(f)
+
+        except Exception as e:
+            raise e
+            # TODO Store error in database and make nice HTTP response!
+
+        try:
+            self.store_file_item(filename, url, data_type, data, number)
+
+        except Exception as e:
+            raise e
+            # TODO Store error in database and make nice HTTP response!
 
     def store_file_item(self, filename, url, data_type, json_data, number):
 
